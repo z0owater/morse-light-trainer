@@ -70,8 +70,7 @@ lamp on your own screen.
 
 ## Messages
 
-Part B uses the 149 signal meanings in the General section of the International
-Code of Signals (2005) that have 10 to 20 words and no brackets or blanks. You can
+Part B uses the 149 signal meanings in the General section of the [International Code of Signals (2005 Edition)](https://bempc.com/images/ics_international_code_of_signals_2005.pdf) that have 10 to 20 words and no brackets or blanks. You can
 choose the length range in Settings; it's 11 to 16 words by default.
 
 ## Building
