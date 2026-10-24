@@ -1,0 +1,8 @@
+morse_light_trainer_settings.json
+__pycache__/
+build/
+dist/
+dmg/
+*.spec
+*.dmg
+*.exe

@@ -1,0 +1,82 @@
+name: Build
+
+# Every push to main builds both apps as a check. Pushing a tag such as
+# v1.2.0 also publishes them as a release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the timing model
+        run: python morse_light_trainer.py --selftest
+      - name: Install PyInstaller
+        run: python -m pip install pyinstaller==6.22.3
+      - name: Build
+        run: python -m PyInstaller --onefile --windowed --name "Morse Light Trainer" --icon lamp.ico morse_light_trainer.py
+      - name: Rename
+        run: Move-Item "dist/Morse Light Trainer.exe" "Morse-Light-Trainer-Windows.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Morse-Light-Trainer-Windows.exe
+
+  macos:
+    runs-on: macos-latest
+    env:
+      PY: /Library/Frameworks/Python.framework/Versions/3.12/bin/python3
+    steps:
+      - uses: actions/checkout@v4
+      # The python.org build is universal2 and has its own Tk 8.6,
+      # so one app runs on both Intel and Apple Silicon Macs.
+      - name: Install Python from python.org
+        run: |
+          curl -fsSLO https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
+          sudo installer -pkg python-3.12.10-macos11.pkg -target /
+      - name: Check the timing model
+        run: $PY morse_light_trainer.py --selftest
+      - name: Install PyInstaller
+        run: $PY -m pip install pyinstaller==6.22.3 pillow
+      - name: Build
+        run: $PY -m PyInstaller --windowed --target-arch universal2 --name "Morse Light Trainer" --icon lamp.ico morse_light_trainer.py
+      - name: Make the disk image
+        run: |
+          mkdir dmg
+          ditto "dist/Morse Light Trainer.app" "dmg/Morse Light Trainer.app"
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Morse Light Trainer" -srcfolder dmg -ov -format UDZO Morse-Light-Trainer-macOS.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: Morse-Light-Trainer-macOS.dmg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" out/*
+          --repo "$GITHUB_REPOSITORY"
+          --title "Morse Light Trainer ${GITHUB_REF_NAME#v}"
+          --notes "Windows: download the .exe and double-click it.
+          Mac: open the .dmg and drag Morse Light Trainer into Applications.
+          The README explains the warning each system shows the first time."
