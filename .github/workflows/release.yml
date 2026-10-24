@@ -66,10 +66,16 @@ jobs:
     needs: [windows, macos]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '/^## /{p = ($2 == v); next} p' CHANGELOG.md > notes.md
+          printf '\n**Windows:** download the .exe and double-click it. **Mac:** open the .dmg and drag Morse Light Trainer into Applications. The README explains the warning each system shows the first time.\n' >> notes.md
+          cat notes.md
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,6 +83,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" out/*
           --repo "$GITHUB_REPOSITORY"
           --title "Morse Light Trainer ${GITHUB_REF_NAME#v}"
-          --notes "Windows: download the .exe and double-click it.
-          Mac: open the .dmg and drag Morse Light Trainer into Applications.
-          The README explains the warning each system shows the first time."
+          --notes-file notes.md

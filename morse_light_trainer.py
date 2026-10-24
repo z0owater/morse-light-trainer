@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Morse Light Trainer 1.2
+Morse Light Trainer 1.2.1
 
 Practice for receiving Morse signals by flashing light, as in the Proficiency
 in Communications practical for the Certificate of Competency (Deck Officer)
@@ -279,6 +279,7 @@ DEFAULTS = {
     "group_style": "g1",                      # g1 = 4 letters + 1 digit, g2 = 3 letters + 2 digits
     "min_words": 11, "max_words": 16,         # message length range (10 to 20)
     "pass_pct": 90, "show_progress": False,
+    "theme": "system",                        # system, light or dark
     "recent": [], "last_dir": "",
     "settings_version": 2,
 }
@@ -311,6 +312,8 @@ def load_settings():
     for k in ("lamp_on", "lamp_off", "stage_bg", "housing_color"):
         if not HEX.match(str(s[k])):
             s[k] = DEFAULTS[k]
+    if s["theme"] not in ("system", "light", "dark"):
+        s["theme"] = DEFAULTS["theme"]
     if s["min_words"] > s["max_words"]:
         s["min_words"], s["max_words"] = s["max_words"], s["min_words"]
     return s
@@ -687,10 +690,132 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinter import font as tkfont
 
-PAPER, INK, INK2, RULE = "#FFFFFF", "#121A26", "#4A5668", "#18212D"
 SHORTCUT = 0x0004 | (0x0008 if IS_MAC else 0)   # Ctrl (and Cmd on a Mac) keys go to the menus
-PANEL, FLAG = "#EEF1F5", "#1B4D9B"
-OK_BG, OK_FG, BAD_BG, BAD_FG, BLANK_BG, BLANK_FG = "#E1F1E8", "#16724A", "#FBE4E7", "#B5142A", "#FBEED6", "#8A5300"
+
+# Window colours. No colour appears in both sets, so switching can swap them widget by widget.
+LIGHT = dict(PAPER="#FFFFFF", INK="#121A26", INK2="#4A5668", RULE="#18212D", PANEL="#EEF1F5", FLAG="#1B4D9B",
+             BORDER="#C9D1DC", BAR="#DCE2EA", OK_BG="#E1F1E8", OK_FG="#16724A", BAD_BG="#FBE4E7",
+             BAD_FG="#B5142A", BLANK_BG="#FBEED6", BLANK_FG="#8A5300")
+DARK = dict(PAPER="#1D2025", INK="#E3E7ED", INK2="#9BA5B3", RULE="#7D8897", PANEL="#141619", FLAG="#5B9BFF",
+            BORDER="#363C46", BAR="#3A4250", OK_BG="#16382A", OK_FG="#7FD9A8", BAD_BG="#45191F",
+            BAD_FG="#FF8F9B", BLANK_BG="#3F3118", BLANK_FG="#EDC06A")
+PAPER = INK = INK2 = RULE = PANEL = FLAG = BORDER = BAR = None
+OK_BG = OK_FG = BAD_BG = BAD_FG = BLANK_BG = BLANK_FG = None
+COLOUR_OPTIONS = ("background", "foreground", "highlightbackground", "highlightcolor", "insertbackground",
+                  "readonlybackground", "disabledforeground", "selectbackground", "selectforeground",
+                  "activebackground", "activeforeground")
+
+
+def set_palette(dark):
+    """Point the colour names at one set; widgets made from now on use it."""
+    globals().update(DARK if dark else LIGHT)
+
+
+set_palette(False)
+
+
+def recolour(top, dark):
+    """Swap every widget and canvas item below top from one colour set to the other."""
+    old, new = (LIGHT, DARK) if dark else (DARK, LIGHT)
+    swap = dict((old[k].upper(), new[k]) for k in old)
+    stack = [top]
+    while stack:
+        w = stack.pop()
+        stack.extend(w.winfo_children())
+        if getattr(w, "keep_colours", False):        # lamp canvases and colour swatches
+            continue
+        for opt in COLOUR_OPTIONS:
+            try:
+                v = swap.get(str(w.cget(opt)).upper())
+                if v:
+                    w.configure(**{opt: v})
+            except Exception:
+                pass
+        if isinstance(w, tk.Canvas):
+            for item in w.find_all():
+                for opt in ("fill", "outline"):
+                    try:
+                        v = swap.get(str(w.itemcget(item, opt)).upper())
+                        if v:
+                            w.itemconfigure(item, **{opt: v})
+                    except Exception:
+                        pass
+        elif isinstance(w, tk.Text):
+            for tag in w.tag_names():
+                for opt in ("foreground", "background"):
+                    v = swap.get(str(w.tag_cget(tag, opt)).upper())
+                    if v:
+                        w.tag_configure(tag, **{opt: v})
+
+
+def system_dark(root):
+    """Whether the computer is set to dark mode."""
+    if IS_WIN:
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
+                return winreg.QueryValueEx(k, "AppsUseLightTheme")[0] == 0
+        except Exception:
+            return False
+    if IS_MAC:
+        try:
+            return bool(int(root.tk.call("::tk::unsupported::MacWindowStyle", "isdark", str(root))))
+        except Exception:
+            return False
+    try:
+        import subprocess
+        out = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                             capture_output=True, text=True, timeout=2).stdout
+        return "dark" in out
+    except Exception:
+        return False
+
+
+def dark_title_bar(win, on):
+    """Windows 10 and 11: a dark or light title bar."""
+    if not IS_WIN:
+        return
+    try:
+        import ctypes
+        win.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
+        val = ctypes.c_int(1 if on else 0)
+        for attr in (20, 19):           # DWMWA_USE_IMMERSIVE_DARK_MODE; 19 on early Windows 10 builds
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(val), ctypes.sizeof(val)) == 0:
+                break
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x37)    # redraw the frame now
+    except Exception:
+        pass
+
+
+def dark_ttk_theme(st, z):
+    """A dark ttk theme built on clam, for Windows and Linux. The Mac has its own dark appearance."""
+    d = DARK
+    bg, field, fg, dim, line, btn, hot = d["PANEL"], d["PAPER"], d["INK"], d["INK2"], d["BORDER"], "#262A31", "#323843"
+    check = {"configure": dict(indicatorbackground=field, indicatorforeground=fg, indicatorsize=int(12 * z),
+                               indicatormargin=(1, 1, int(5 * z), 1)),
+             "map": {"background": [("active", bg)], "indicatorbackground": [("pressed", hot), ("disabled", bg)]}}
+    st.theme_create("mlt-dark", parent="clam", settings={
+        ".": {"configure": dict(background=bg, foreground=fg, fieldbackground=field, bordercolor=line,
+                                lightcolor=bg, darkcolor=bg, troughcolor=bg, selectbackground=d["FLAG"],
+                                selectforeground=field, insertcolor=fg, arrowcolor=fg, focuscolor=d["FLAG"]),
+              "map": {"foreground": [("disabled", dim)]}},
+        "TButton": {"configure": dict(background=btn, lightcolor=btn, darkcolor=btn),
+                    "map": {"background": [("disabled", bg), ("pressed", hot), ("active", hot)],
+                            "lightcolor": [("active", hot)], "darkcolor": [("active", hot)]}},
+        "TNotebook": {"configure": dict(background=bg)},
+        "TNotebook.Tab": {"configure": dict(background=btn, lightcolor=btn, padding=(10, 3)),
+                          "map": {"background": [("selected", field)], "lightcolor": [("selected", field)]}},
+        "TCombobox": {"map": {"fieldbackground": [("readonly", field)], "foreground": [("readonly", fg)],
+                              "background": [("active", hot)]}},
+        "TSpinbox": {"configure": dict(background=btn), "map": {"background": [("active", hot)]}},
+        "TScrollbar": {"configure": dict(background=btn, troughcolor=bg, bordercolor=bg, lightcolor=btn, darkcolor=btn),
+                       "map": {"background": [("active", hot)]}},
+        "TScale": {"configure": dict(background=btn, troughcolor=field)},
+        "TCheckbutton": check,
+        "TRadiobutton": check,
+    })
 
 
 def _rgb(h):
@@ -764,6 +889,8 @@ def show_over(win, parent):
     y = max(0, min(y, win.winfo_screenheight() - h - 60))
     win.geometry("+%d+%d" % (x, y))
     win.deiconify()
+    if getattr(win, "app", None):
+        win.app.style_window(win)
     try:
         win.wait_visibility()
         win.grab_set()
@@ -1085,7 +1212,7 @@ class SheetView(tk.Frame):
         a = self.app
         for w in self.res.winfo_children():
             w.destroy()
-        box = tk.Frame(self.res, bg=PANEL, padx=14, pady=10, highlightthickness=1, highlightbackground="#C9D1DC")
+        box = tk.Frame(self.res, bg=PANEL, padx=14, pady=10, highlightthickness=1, highlightbackground=BORDER)
         box.pack(fill="x")
         top = tk.Frame(box, bg=PANEL)
         top.pack(fill="x")
@@ -1200,7 +1327,8 @@ class SettingsDialog(tk.Toplevel):
         cb.grid(row=0, column=1, columnspan=2, sticky="w", padx=8, pady=2)
         cb.bind("<<ComboboxSelected>>", lambda e: self.apply_preset())
         self.preview = tk.Canvas(t_lamp, width=int(330 * app.z), height=int(130 * app.z), highlightthickness=1,
-                                 highlightbackground="#C9D1DC")
+                                 highlightbackground=BORDER)
+        self.preview.keep_colours = True       # redrawn from the lamp colours
         self.preview.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 10))
         r = 2
         self.swatch = {}
@@ -1208,6 +1336,7 @@ class SettingsDialog(tk.Toplevel):
             ttk.Label(t_lamp, text=label).grid(row=r, column=0, sticky="w")
             sw = tk.Label(t_lamp, width=4, relief="solid", bd=1, bg=self.col[key].get())
             sw.grid(row=r, column=1, sticky="w", padx=8, pady=2)
+            sw.keep_colours = True
             self.swatch[key] = sw
             row = ttk.Frame(t_lamp)
             row.grid(row=r, column=2, sticky="w")
@@ -1401,7 +1530,7 @@ class CalibrateDialog(tk.Toplevel):
         px = self.var.get()
         self.cv.delete("all")
         w = self.CARD_MM * px
-        self.cv.create_rectangle(2, 8, 2 + w, 38, outline=INK, width=2, fill="#DCE2EA")
+        self.cv.create_rectangle(2, 8, 2 + w, 38, outline=INK, width=2, fill=BAR)
         mm = self.app.s["lamp_mm"]
         self.lab.configure(text="%.2f pixels per mm, so a %.1f mm lamp is %d px" % (px, mm, round(mm * px)))
 
@@ -1430,7 +1559,10 @@ class App:
     def __init__(self, root):
         self.root, self.s = root, load_settings()
         self.z = max(1.0, root.winfo_fpixels("1i") / 96.0)
+        self.dark = self._want_dark()
+        set_palette(self.dark)
         self._fonts()
+        self._ttk_theme(self.dark)
         root.title("Morse Light Trainer")
         root.configure(bg=PANEL)
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
@@ -1448,6 +1580,8 @@ class App:
         root.bind("<F11>", lambda e: self.toggle_full())
         root.bind("<Escape>", lambda e: self.on_escape())
         root.protocol("WM_DELETE_WINDOW", self.quit)
+        root.after(100, lambda: self.style_window(root))
+        root.after(3000, self._watch_theme)
         if IS_MAC and tk.TkVersion < 8.6:
             root.after(600, lambda: messagebox.showwarning("Old Tk", (
                 "This Python has Tk %s, which is too old to draw the lamp properly.\n\n"
@@ -1476,17 +1610,76 @@ class App:
         self.f_note = (mono, 13)
         self.f_badge = (mono, 11, "bold")
         self.f_badge_s = (mono, 9, "bold")
+        self.sans = sans
         st = ttk.Style()
-        try:
-            if "vista" in st.theme_names():
-                st.theme_use("vista")
-            elif IS_MAC and "aqua" in st.theme_names():
-                st.theme_use("aqua")
-            elif "clam" in st.theme_names():
-                st.theme_use("clam")
-        except Exception:
-            pass
-        st.configure("Big.TButton", font=(sans, 10, "bold"), padding=(12, 5))
+        self.base_theme = next((t for t in ("vista", "aqua" if IS_MAC else "", "clam") if t in st.theme_names()), None)
+
+    def _want_dark(self):
+        t = self.s["theme"]
+        return t == "dark" or (t == "system" and system_dark(self.root))
+
+    def _ttk_theme(self, dark):
+        st = ttk.Style()
+        if not IS_MAC:              # the Mac's aqua theme follows the window's appearance instead
+            try:
+                if dark:
+                    if "mlt-dark" not in st.theme_names():
+                        dark_ttk_theme(st, self.z)
+                    st.theme_use("mlt-dark")
+                elif self.base_theme:
+                    st.theme_use(self.base_theme)
+            except Exception:
+                pass
+        elif self.base_theme:
+            st.theme_use(self.base_theme)
+        st.configure("Big.TButton", font=(self.sans, 10, "bold"), padding=(12, 5))
+        r = self.root
+        r.option_add("*TCombobox*Listbox.background", PAPER)
+        r.option_add("*TCombobox*Listbox.foreground", INK)
+        r.option_add("*TCombobox*Listbox.selectBackground", FLAG)
+        r.option_add("*TCombobox*Listbox.selectForeground", PAPER)
+
+    def style_window(self, win):
+        """Dark or light window frame: the title bar on Windows, the appearance on a Mac."""
+        if IS_MAC:
+            try:
+                look = {"dark": "darkaqua", "light": "aqua"}.get(self.s["theme"], "auto")
+                win.tk.call("::tk::unsupported::MacWindowStyle", "appearance", str(win), look)
+            except Exception:
+                pass
+        else:
+            dark_title_bar(win, self.dark)
+
+    def windows(self):
+        return [self.root] + [w for w in self.root.winfo_children() if isinstance(w, tk.Toplevel)]
+
+    def on_theme(self):
+        self.s["theme"] = self.v_theme.get()
+        save_settings(self.s)
+        self.apply_theme()
+
+    def apply_theme(self):
+        if IS_MAC:
+            for w in self.windows():
+                self.style_window(w)
+            self.root.update_idletasks()
+        dark = self._want_dark()
+        if dark != self.dark:
+            self.dark = dark
+            set_palette(dark)
+            recolour(self.root, dark)
+            self._ttk_theme(dark)
+            self.redraw_lamps()
+        if not IS_MAC:
+            for w in self.windows():
+                self.style_window(w)
+
+    def _watch_theme(self):
+        """Follow the computer's light or dark setting, but never repaint while the lamp is running."""
+        if self.s["theme"] == "system" and not self.run and (IS_WIN or IS_MAC):
+            if system_dark(self.root) != self.dark:
+                self.apply_theme()
+        self.root.after(3000, self._watch_theme)
 
     def px_per_mm(self):
         return self.s["px_per_mm"] if self.s["px_per_mm"] > 0 else self.root.winfo_fpixels("1m")
@@ -1507,6 +1700,11 @@ class App:
         m_lamp.add_command(label="Full-screen lamp", command=self.toggle_full, accelerator="F11")
         m_lamp.add_command(label="Calibrate size with a card...", command=lambda: CalibrateDialog(self, self.root))
         menu.add_cascade(label="Lamp", menu=m_lamp)
+        m_view = tk.Menu(menu, tearoff=0)
+        self.v_theme = tk.StringVar(value=self.s["theme"])
+        for val, label in (("light", "Light"), ("dark", "Dark"), ("system", "Match system")):
+            m_view.add_radiobutton(label=label, value=val, variable=self.v_theme, command=self.on_theme)
+        menu.add_cascade(label="View", menu=m_view)
         if IS_MAC:
             # The Mac menu bar ignores plain commands.
             m_set = tk.Menu(menu, tearoff=0)
@@ -1548,6 +1746,7 @@ class App:
         pane = tk.PanedWindow(r, orient="horizontal", sashwidth=6, bg=PANEL, bd=0)
         pane.pack(fill="both", expand=True, padx=10, pady=(0, 6))
         lamp_canvas = tk.Canvas(pane, bg=self.s["stage_bg"], highlightthickness=0, width=int(420 * self.z))
+        lamp_canvas.keep_colours = True
         self.lamp_main = LampView(self, lamp_canvas)
         self.lamps.append(self.lamp_main)
         pane.add(lamp_canvas, minsize=int(260 * self.z), stretch="always")
@@ -1969,6 +2168,7 @@ class App:
         except Exception:
             w.state("zoomed")
         c = tk.Canvas(w, bg=self.s["stage_bg"], highlightthickness=0)
+        c.keep_colours = True
         c.pack(fill="both", expand=True)
         lv = LampView(self, c, hint="Esc to close. Typing still goes into the answer sheet.")
         lv.on = self.lamp_main.on
@@ -1982,6 +2182,7 @@ class App:
         w.bind("<Key>", self._full_key)
         w.protocol("WM_DELETE_WINDOW", self.toggle_full)
         self.full_win = w
+        self.style_window(w)
         w.focus_force()
 
     def _full_key(self, ev):
@@ -2015,7 +2216,7 @@ class App:
     def about(self):
         u = dot_seconds(self.s["wpm"])
         messagebox.showinfo("About", (
-            "Morse Light Trainer 1.2\n\n"
+            "Morse Light Trainer 1.2.1\n\n"
             "Lamp timing follows CW Player 4.7.5:\n"
             "  dot %.3f s, dash 3 dots, 1 dot inside a character\n"
             "  3 x SPACE dots after every character\n"

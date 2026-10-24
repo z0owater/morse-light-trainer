@@ -45,6 +45,7 @@ python3 that comes with macOS has an old Tk).
   press Space after each word. Leave a box empty if you miss something.
 - When the recording ends you get 10 minutes to tidy up. Then press **Mark**.
 - **F11** shows the lamp full screen. Typing still goes into the answer sheet.
+- **View** switches between light and dark, or follows your computer's setting.
 - **File > Open** plays any CW Player text file. **File > Save** writes the exam as
   a CW Player text file, with an answer key, so you can play it on the real light box.
 
@@ -76,8 +77,8 @@ choose the length range in Settings; it's 11 to 16 words by default.
 ## Building
 
 GitHub Actions builds the Windows .exe and the Mac .dmg on every push to `main`,
-and pushing a tag such as `v1.2.0` attaches them to a release. To build the .exe
-yourself on Windows:
+and pushing a tag such as `v1.2.1` attaches them to a release, with that version's
+notes from [CHANGELOG.md](CHANGELOG.md). To build the .exe yourself on Windows:
 
 ```
 py -m pip install pyinstaller
