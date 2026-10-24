@@ -1,16 +1,16 @@
 # Morse Light Trainer
 
-Practice for receiving Morse signals by flashing light, as tested in the
-Proficiency in Communications practical for the Certificate of Competency (Deck
-Officer) Class 3. It flashes a signalling lamp on screen with the same timing
-CW Player 4.7.5 uses in the exam, gives you an answer sheet laid out like the
-paper one, and marks each part at the 90% pass mark.
+Practice for receiving Morse signals by flashing light, as tested in the Proficiency in Communication practical for the Certificate of Competency (Deck Officer) Class 3.
 
-The examination is set out in the Marine Department's *Certificates of Competency
-and Licences for Seagoing Deck Officers' Determinations* (2022 Edition):
-7.1.1 gives the Oral / Practical pass mark of 90% for Proficiency in
-Communication, and 8.2.2 covers Competence (ii), transmitting and receiving
-information by visual signalling with the Morse light.
+It flashes a signalling lamp on screen with the same timing as the exam recording, gives you an answer sheet laid out like the paper one, and marks each part at the 90% pass mark.
+
+The examination is set out in the Marine Department's [*Certificates of Competency and Licences for Seagoing Deck Officers' Determinations* (2022 Edition)](https://www.mardep.gov.hk/filemanager/en/share/pub-services/pdf/determination_d03.pdf). Section 7.1.1 gives the oral/practical pass mark of 90% for Proficiency in Communication, and section 8.2.2 covers Competence (ii), transmitting and receiving information by visual signalling using the Morse light.
+
+## Disclaimer
+
+This is an unofficial, vibe-coded project. I only made it because I couldn't find anything else like it. It isn't affiliated with or endorsed by the Marine Department or any training institute, and passing here doesn't guarantee a pass in the real exam.
+
+If you're new to Morse code, learn it by sound first at [LCWO.net](https://lcwo.net) (Learn CW Online), then come back here to practise reading it by light.
 
 ## Download
 
